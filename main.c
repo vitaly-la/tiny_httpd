@@ -81,5 +81,7 @@ void _start(void)
             write(2, msg, sizeof(msg) - 1);
             _exit(1);
         }
+
+        close(c);
     }
 }
