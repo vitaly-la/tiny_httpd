@@ -118,20 +118,9 @@ void _start(void)
 
     for (;;) {
         int c = accept(s, (struct sockaddr*)&sa, &b);
-        if (c == -1) {
-            char msg[] = "accept failed\n";
-            write(2, msg, sizeof(msg) - 1);
-            _exit(1);
-        }
-
-        if (write(c, response, response_len) == -1) {
-            char msg[] = "write failed\n";
-            write(2, msg, sizeof(msg) - 1);
-            _exit(1);
-        }
-
+        write(c, response, response_len);
         if (close(c) == -1) {
-            char msg[] = "close failed\n";
+            char msg[] = "descriptor failure\n";
             write(2, msg, sizeof(msg) - 1);
             _exit(1);
         }
