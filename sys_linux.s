@@ -7,6 +7,7 @@
 	.globl	mmap
 	.globl	open
 	.globl	read
+	.globl	setitimer
 	.globl	socket
 	.globl	wait4
 	.globl	write
@@ -56,6 +57,11 @@ open:
 
 read:
 	mov	$0, %eax
+	syscall
+	ret
+
+setitimer:
+	mov	$38, %eax
 	syscall
 	ret
 
