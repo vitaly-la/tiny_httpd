@@ -1,13 +1,18 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <signal.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#ifdef LINUX
+#define MAP_ANON 0x20
+struct rusage;
+pid_t wait4(pid_t wpid, int *status, int options, struct rusage *rusage);
+#endif
 
 enum { port = 8000 };
 
@@ -24,7 +29,7 @@ static const char bad_request[] = "HTTP/1.1 400 Bad Request\r\n"
 
 static const char get_request[] = "GET / HTTP/1.1";
 
-static inline uint16_t my_htons(uint16_t hostshort)
+static uint16_t my_htons(uint16_t hostshort)
 {
     return ((hostshort & 255) << 8) | ((hostshort & ~255) >> 8);
 }
@@ -32,8 +37,10 @@ static inline uint16_t my_htons(uint16_t hostshort)
 static char *itoa(unsigned val)
 {
     static char buf[32];
+    int i;
+
     buf[31] = '\0';
-    int i = 30;
+    i = 30;
     do {
         buf[i] = "0123456789"[val % 10];
         --i;
@@ -44,7 +51,8 @@ static char *itoa(unsigned val)
 
 static int memcmp(const void *b1, const void *b2, size_t len)
 {
-    for (size_t i = 0; i < len; ++i) {
+    size_t i;
+    for (i = 0; i < len; ++i) {
         if (((char*)b1)[i] != ((char*)b2)[i]) {
             return ((char*)b2)[i] - ((char*)b1)[i];
         }
@@ -54,7 +62,8 @@ static int memcmp(const void *b1, const void *b2, size_t len)
 
 static void *mempcpy(void *dst, const void *src, size_t len)
 {
-    for (size_t i = 0; i < len; ++i) {
+    size_t i;
+    for (i = 0; i < len; ++i) {
         ((char*)dst)[i] = ((char*)src)[i];
     }
     return (char*)dst + len;
@@ -69,7 +78,8 @@ size_t strlen(const char *s)
 
 static int parse_request(char *buffer, long cnt, int *status)
 {
-    for (long i = 0; i < cnt - 3; ++i) {
+    long i;
+    for (i = 0; i < cnt - 3; ++i) {
         if (memcmp(buffer + i, "\r\n\r\n", 4) == 0) {
             if (cnt < (long)sizeof(get_request) - 1 ||
                 memcmp(buffer, get_request,
@@ -80,7 +90,7 @@ static int parse_request(char *buffer, long cnt, int *status)
             return 0;
         }
     }
-    for (long i = 0; i < cnt - 1; ++i) {
+    for (i = 0; i < cnt - 1; ++i) {
         if (memcmp(buffer + i, "\n\n", 2) == 0) {
             if (cnt < (long)sizeof(get_request) - 1 ||
                 memcmp(buffer, get_request,
@@ -96,6 +106,10 @@ static int parse_request(char *buffer, long cnt, int *status)
 
 static size_t create_response(char **presponse)
 {
+    struct stat sb;
+    size_t len, response_len, i;
+    char *response, *ptr;
+
     int fd = open("index.html", O_RDONLY);
     if (fd < 0 || fd == ENOENT) {
         char msg[] = "open failed\n";
@@ -103,12 +117,11 @@ static size_t create_response(char **presponse)
         _exit(1);
     }
 
-    struct stat sb;
     fstat(fd, &sb);
-    size_t len = sb.st_size;
-    size_t response_len = len;
+    len = sb.st_size;
+    response_len = len;
 
-    for (size_t i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
+    for (i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
         response_len += strlen(headers[i]);
     }
     response_len += sizeof("Content-Length: ") - 1;
@@ -116,11 +129,11 @@ static size_t create_response(char **presponse)
     response_len += sizeof("\r\n") - 1;
     response_len += sizeof("\r\n") - 1;
 
-    char *response = mmap(NULL, response_len, PROT_READ | PROT_WRITE,
-                          MAP_ANON | MAP_PRIVATE, -1, 0);
+    response = mmap(NULL, response_len, PROT_READ | PROT_WRITE,
+                    MAP_ANON | MAP_PRIVATE, -1, 0);
 
-    char *ptr = response;
-    for (size_t i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
+    ptr = response;
+    for (i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
         ptr = mempcpy(ptr, headers[i], strlen(headers[i]));
     }
     ptr = mempcpy(ptr, "Content-Length: ",
@@ -137,6 +150,39 @@ static size_t create_response(char **presponse)
     return response_len;
 }
 
+static void serve(int client_fd, char *response, size_t response_len)
+{
+    /* zero-initialization of itimerval causes SIGBUS
+       on Linux clang -O2 */
+    volatile struct itimerval timer;
+    int status;
+    long cnt;
+    char buffer[1024];
+
+    timer.it_value.tv_sec     = 10;
+    timer.it_value.tv_usec    = 0;
+    timer.it_interval.tv_sec  = 10;
+    timer.it_interval.tv_usec = 0;
+    setitimer(ITIMER_REAL, (const struct itimerval*)&timer, NULL);
+
+    status = 0;
+    for (cnt = 0;;) {
+        char *ptr = buffer + cnt;
+        cnt += read(client_fd, ptr, sizeof(buffer) - cnt);
+        if (parse_request(buffer, cnt, &status) == 0) {
+            break;
+        }
+    }
+
+    if (status == 0) {
+        write(client_fd, response, response_len);
+    } else {
+        write(client_fd, bad_request, sizeof(bad_request) - 1);
+    }
+
+    _exit(0);
+}
+
 void _start(void)
 {
     char *response;
@@ -145,10 +191,11 @@ void _start(void)
     int sock = socket(PF_INET, SOCK_STREAM, 0);
     
     struct sockaddr_in sa = {0};
+    socklen_t b;
+
     sa.sin_family = AF_INET;
     sa.sin_port = my_htons(port);
-    socklen_t b = sizeof(sa);
-
+    b = sizeof(sa);
     if (bind(sock, (const struct sockaddr*)&sa, b)) {
         char msg[] = "bind failed\n";
         write(2, msg, sizeof(msg) - 1);
@@ -162,29 +209,7 @@ void _start(void)
         int pid = fork();
         if (pid == 0) {
             close(sock);
-
-            struct itimerval timer;
-            timer.it_value.tv_sec  = 10;
-            timer.it_value.tv_usec = 0;
-            setitimer(ITIMER_REAL, &timer, NULL);
-
-            char buffer[1024];
-            int status = 0;
-            for (long cnt = 0;;) {
-                char *ptr = buffer + cnt;
-                cnt += read(client_fd, ptr, sizeof(buffer) - cnt);
-                if (parse_request(buffer, cnt, &status) == 0) {
-                    break;
-                }
-            }
-
-            if (status == 0) {
-                write(client_fd, response, response_len);
-            } else {
-                write(client_fd, bad_request, sizeof(bad_request) - 1);
-            }
-
-            _exit(0);
+            serve(client_fd, response, response_len);
         }
         close(client_fd);
         do {
