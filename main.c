@@ -8,7 +8,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "parser.h"
+#include "string.h"
 
 #ifdef LINUX
 #define MAP_ANON 0x20
@@ -16,18 +18,16 @@ struct rusage;
 pid_t wait4(pid_t wpid, int *status, int options, struct rusage *rusage);
 #endif
 
-enum { port = 8000 };
+static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
+                                 "Content-Type: text/html\r\n",
+                                 "Connection: close\r\n" };
 
-static const char *endpoints[] = {"/", "index.html"};
-
-static const char *headers[] = {"HTTP/1.1 200 OK\r\n",
-                                "Content-Type: text/html\r\n",
-                                "Connection: close\r\n"};
-
-static uint16_t my_htons(uint16_t hostshort)
+#ifndef htons
+static uint16_t htons(uint16_t hostshort)
 {
     return ((hostshort & 255) << 8) | ((hostshort & ~255) >> 8);
 }
+#endif
 
 static char *itoa(unsigned val)
 {
@@ -107,8 +107,8 @@ static char *create_response(const char *path)
 static void create_responses(char **responses)
 {
     size_t i;
-    for (i = 0; i < sizeof(endpoints) / sizeof(*endpoints); i += 2) {
-        responses[i / 2] = create_response(endpoints[i + 1]);
+    for (i = 0; i < endpoints_count; ++i) {
+        responses[i] = create_response(pages[i]);
     }
 }
 
@@ -117,7 +117,7 @@ static void serve(int client_fd, char **responses)
     /* zero-initialization of itimerval causes SIGBUS
        on Linux clang -O2 */
     volatile struct itimerval timer;
-    long cnt;
+    size_t cnt;
     char buffer[1024];
     const char *response = NULL;
 
@@ -142,16 +142,16 @@ static void serve(int client_fd, char **responses)
 
 void _start(void)
 {
-    char *responses[sizeof(endpoints) / 2];
+    char *responses[endpoints_count];
     int sock;
-    struct sockaddr_in sa = {0};
+    struct sockaddr_in sa = { 0 };
     socklen_t b;
 
     create_responses(responses);
     sock = socket(PF_INET, SOCK_STREAM, 0);
 
     sa.sin_family = AF_INET;
-    sa.sin_port = my_htons(port);
+    sa.sin_port = htons(port);
     b = sizeof(sa);
     if (bind(sock, (const struct sockaddr*)&sa, b)) {
         char msg[] = "bind failed\n";

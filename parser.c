@@ -1,6 +1,7 @@
 #include "parser.h"
 
-#include <stddef.h>
+#include "config.h"
+#include "string.h"
 
 struct line
 {
@@ -15,8 +16,6 @@ struct token
 };
 
 static const char method[] = "GET";
-
-static const char endpoint[] = "/";
 
 static const char version[] = "HTTP/1.1";
 
@@ -40,73 +39,69 @@ static int memcmp(const void *b1, const void *b2, size_t len)
 
 static struct line next_line(char *buffer, char *end_ptr, int crlf)
 {
-    struct line line;
+    struct line line = { NULL, 0 };
     char *ptr;
 
-    if (buffer >= end_ptr) {
-        line.ptr = NULL;
-        line.len = 0;
-        return line;
+    if (buffer < end_ptr) {
+        line.ptr = buffer;
+        line.len = end_ptr - buffer;
     }
 
     if (crlf) {
         for (ptr = buffer; ptr < end_ptr - 1; ++ptr) {
             if (memcmp(ptr, "\r\n", 2) == 0) {
-                line.ptr = buffer;
                 line.len = ptr - buffer;
-                return line;
+                break;
             }
         }
     } else {
         for (ptr = buffer; ptr < end_ptr; ++ptr) {
             if (*ptr == '\n') {
-                line.ptr = buffer;
                 line.len = ptr - buffer;
-                return line;
+                break;
             }
         }
     }
 
-    line.ptr = buffer;
-    line.len = end_ptr - buffer;
     return line;
 }
 
 static struct token next_token(char *buffer, char *end_ptr)
 {
-    struct token token;
+    struct token token = { NULL, 0 };
     char *ptr;
 
-    if (buffer >= end_ptr) {
-        token.ptr = NULL;
-        token.len = 0;
-        return token;
-    }
-
     for (ptr = buffer; ptr < end_ptr; ++ptr) {
-        if (*ptr == ' ' || *ptr == '\r' || *ptr == '\n') {
-            token.ptr = buffer;
-            token.len = ptr - buffer;
-            return token;
+        if (*ptr == ' ' || *ptr == '\r' ||
+            *ptr == '\n' || *ptr == '\0')
+        {
+            if (token.ptr) {
+                token.len = ptr - token.ptr;
+                break;
+            }
+        } else if (!token.ptr) {
+            token.ptr = ptr;
         }
     }
 
-    token.ptr = buffer;
-    token.len = end_ptr - buffer;
+    if (token.ptr && !token.len) {
+        token.len = end_ptr - token.ptr;
+    }
+
     return token;
 }
 
-const char *parse_request(char *buffer, long cnt, char **responses)
+const char *parse_request(char *buffer, size_t cnt, char **responses)
 {
     struct line line;
     struct token token;
     char *line_ptr, *token_ptr;
     int crlf = 0;
     int parsed_method = 0;
-    int parsed_endpoint = 0;
+    int endpoint_idx = -1;
     int parsed_version = 0;
     int bad_request = 0;
-    long i;
+    size_t i;
 
     for (i = 0; i < cnt - 1; ++i) {
         if (memcmp(buffer + i, "\r\n", 2) == 0) {
@@ -122,10 +117,10 @@ const char *parse_request(char *buffer, long cnt, char **responses)
             return NULL;
         }
         if (line.ptr && !line.len) {
-            if (parsed_version && !bad_request) {
-                return responses[0];
-            } else if (bad_request) {
+            if (bad_request) {
                 return response400;
+            } else if (parsed_version) {
+                return responses[endpoint_idx];
             }
         }
         line_ptr = line.ptr + line.len + (crlf ? 2 : 1);
@@ -136,13 +131,9 @@ const char *parse_request(char *buffer, long cnt, char **responses)
             if (!token.ptr) {
                 break;
             }
-            if (token.ptr && !token.len) {
-                ++token_ptr;
-                continue;
-            }
             token_ptr = token.ptr + token.len;
             if (!parsed_method) {
-                if (token.len == sizeof(method) - 1 ||
+                if (token.len == sizeof(method) - 1 &&
                     memcmp(token.ptr, method, token.len) == 0)
                 {
                     parsed_method = 1;
@@ -151,18 +142,22 @@ const char *parse_request(char *buffer, long cnt, char **responses)
                 }
                 continue;
             }
-            if (!parsed_endpoint) {
-                if (token.len == sizeof(endpoint) - 1 ||
-                    memcmp(token.ptr, endpoint, token.len) == 0)
-                {
-                    parsed_endpoint = 1;
-                } else {
+            if (endpoint_idx == -1) {
+                for (i = 0; i < endpoints_count; ++i) {
+                    if (token.len == strlen(endpoints[i]) &&
+                        memcmp(token.ptr, endpoints[i], token.len) == 0)
+                    {
+                        endpoint_idx = i;
+                        break;
+                    }
+                }
+                if (endpoint_idx == -1) {
                     bad_request = 1;
                 }
                 continue;
             }
             if (!parsed_version) {
-                if (token.len == sizeof(version) - 1 ||
+                if (token.len == sizeof(version) - 1 &&
                     memcmp(token.ptr, version, token.len) == 0)
                 {
                     parsed_version = 1;
