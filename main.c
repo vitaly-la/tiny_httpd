@@ -10,7 +10,6 @@
 
 #include "config.h"
 #include "parser.h"
-#include "string.h"
 
 #ifdef LINUX
 #define MAP_ANON 0x20
@@ -22,12 +21,25 @@ static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
                                  "Content-Type: text/html\r\n",
                                  "Connection: close\r\n" };
 
-#ifndef htons
-static uint16_t htons(uint16_t hostshort)
+size_t strlen(const char *s)
+{
+    size_t len = 0;
+    for (; *s != '\0'; ++s, ++len) {}
+    return len;
+}
+
+static uint16_t my_htons(uint16_t hostshort)
 {
     return ((hostshort & 255) << 8) | ((hostshort & ~255) >> 8);
 }
-#endif
+
+static uint32_t my_htonl(uint32_t hostlong)
+{
+    return ((hostlong & (255 << 24)) >> 24) |
+           ((hostlong & (255 << 16)) >>  8) |
+           ((hostlong & (255 <<  8)) <<  8) |
+           ((hostlong & (255 <<  0)) << 24);
+}
 
 static char *itoa(unsigned val)
 {
@@ -51,13 +63,6 @@ static void *mempcpy(void *dst, const void *src, size_t len)
         ((char*)dst)[i] = ((char*)src)[i];
     }
     return (char*)dst + len;
-}
-
-size_t strlen(const char *s)
-{
-    size_t len = 0;
-    for (; *s != '\0'; ++s, ++len) {}
-    return len;
 }
 
 static char *create_response(const char *path)
@@ -115,22 +120,22 @@ static void create_responses(char **responses)
 static void serve(int client_fd, char **responses)
 {
     /* zero-initialization of itimerval causes SIGBUS
-       on Linux clang -O2 */
+       on linux clang -O2 */
     volatile struct itimerval timer;
     size_t cnt;
     char buffer[1024];
     const char *response = NULL;
 
     timer.it_value.tv_sec     = 10;
-    timer.it_value.tv_usec    = 0;
-    timer.it_interval.tv_sec  = 0;
-    timer.it_interval.tv_usec = 0;
+    timer.it_value.tv_usec    =  0;
+    timer.it_interval.tv_sec  =  0;
+    timer.it_interval.tv_usec =  0;
     setitimer(ITIMER_REAL, (const struct itimerval*)&timer, NULL);
 
     for (cnt = 0;;) {
         char *ptr = buffer + cnt;
         cnt += read(client_fd, ptr, sizeof(buffer) - cnt);
-        response = parse_request(buffer, cnt, responses);
+        response = parse_request(buffer, buffer + cnt, responses);
         if (response) {
             break;
         }
@@ -144,14 +149,17 @@ void _start(void)
 {
     char *responses[endpoints_count];
     int sock;
-    struct sockaddr_in sa = { 0 };
+    /* zero-initialization of sockaddr_in causes SEGFAULT
+       on linux for some reason */
+    volatile struct sockaddr_in sa;
     socklen_t b;
 
     create_responses(responses);
     sock = socket(PF_INET, SOCK_STREAM, 0);
 
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(port);
+    sa.sin_port = my_htons(port);
+    sa.sin_addr.s_addr = my_htonl(INADDR_ANY);
     b = sizeof(sa);
     if (bind(sock, (const struct sockaddr*)&sa, b)) {
         char msg[] = "bind failed\n";
