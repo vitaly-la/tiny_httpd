@@ -7,7 +7,7 @@ ifeq ($(SYS), sys_linux)
 endif
 
 all:
-	$(CC) $(CFLAGS) main.c parser.c config.c $(SYS).s -o tiny_httpd
+	$(CC) $(CFLAGS) main.c parser.c $(SYS).s -o tiny_httpd
 	objcopy --remove-section .comment      		tiny_httpd
 	objcopy --remove-section .eh_frame     		tiny_httpd
 	objcopy --remove-section .eh_frame_hdr 		tiny_httpd

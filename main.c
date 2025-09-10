@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define MAIN_C
+
 #include "config.h"
 #include "parser.h"
 
