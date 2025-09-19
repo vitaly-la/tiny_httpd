@@ -8,14 +8,14 @@ size_t strlen(const char *s);
 
 struct line
 {
-    char *begin;
-    char *end;
+    const char *begin;
+    const char *end;
 };
 
 struct token
 {
-    char *begin;
-    char *end;
+    const char *begin;
+    const char *end;
 };
 
 static const char method[] = "GET";
@@ -45,10 +45,11 @@ static int memcmp(const void *b1, const void *b2, size_t len)
     return 0;
 }
 
-static struct line next_line(char *buffer, char *buffer_end, int crlf)
+static struct line next_line(const char *buffer, const char *buffer_end,
+                             int crlf)
 {
-    struct line line = { 0 };
-    char *ptr;
+    struct line line = {0};
+    const char *ptr;
 
     if (buffer < buffer_end) {
         line.begin = buffer;
@@ -74,10 +75,10 @@ static struct line next_line(char *buffer, char *buffer_end, int crlf)
     return line;
 }
 
-static struct token next_token(char *line, char *line_end)
+static struct token next_token(const char *line, const char *line_end)
 {
-    struct token token = { 0 };
-    char *ptr;
+    struct token token = {0};
+    const char *ptr;
 
     for (ptr = line; ptr < line_end; ++ptr) {
         if (*ptr == ' ' || *ptr == '\r' ||
@@ -99,11 +100,12 @@ static struct token next_token(char *line, char *line_end)
     return token;
 }
 
-const char *parse_request(char *buffer, char *end, char **responses)
+const char *parse_request(const char *buffer, const char *end,
+                          const char **responses)
 {
     struct line line;
     struct token token;
-    char *ptr, *line_ptr, *token_ptr;
+    const char *ptr, *line_ptr, *token_ptr;
     int crlf = 0;
     int parsed_method = 0;
     int endpoint_idx = -1;

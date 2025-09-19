@@ -1,17 +1,20 @@
-SYS := $(shell uname | grep -iq linux && echo sys_linux || echo sys_bsd)
-
-CFLAGS := -std=c89 -O2 -Wall -Wextra -static -nostdlib -s
+SYS = $(shell uname | grep -iq linux && echo sys_linux || echo sys_bsd)
+CFLAGS = -Wall -Wextra -ansi -pedantic -O2
+LDFLAGS = -static -nostdlib -s
 
 ifeq ($(SYS), sys_linux)
 	CFLAGS += -DLINUX
 endif
 
-all:
-	$(CC) $(CFLAGS) main.c parser.c $(SYS).s -o tiny_httpd
-	objcopy --remove-section .comment      		tiny_httpd
-	objcopy --remove-section .eh_frame     		tiny_httpd
-	objcopy --remove-section .eh_frame_hdr 		tiny_httpd
-	objcopy --remove-section .note.gnu.build-id	tiny_httpd
+tiny_httpd: main.c parser.o $(SYS).s
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+	objcopy --remove-section .comment      		$@
+	objcopy --remove-section .eh_frame     		$@
+	objcopy --remove-section .eh_frame_hdr 		$@
+	objcopy --remove-section .note.gnu.build-id	$@
+
+parser.o: parser.c parser.h config.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o tiny_httpd
