@@ -111,7 +111,7 @@ static char *create_response(const char *path)
     return response;
 }
 
-static void create_responses(char **responses)
+static void create_responses(const char **responses)
 {
     size_t i;
     for (i = 0; i < endpoints_count; ++i) {
@@ -119,7 +119,7 @@ static void create_responses(char **responses)
     }
 }
 
-static void serve(int client_fd, char **responses)
+static void serve(int client_fd, const char **responses)
 {
     /* zero-initialization of itimerval causes SIGBUS
        on linux clang -O2 */
@@ -149,7 +149,7 @@ static void serve(int client_fd, char **responses)
 
 void _start(void)
 {
-    char *responses[endpoints_count];
+    const char *responses[endpoints_count];
     int sock;
     /* zero-initialization of sockaddr_in causes SEGFAULT
        on linux for some reason */
