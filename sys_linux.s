@@ -1,86 +1,86 @@
-	.globl	accept
-	.globl	bind
-	.globl	close
-	.globl	fork
-	.globl	fstat
-	.globl	listen
-	.globl	mmap
-	.globl	open
-	.globl	read
-	.globl	setitimer
-	.globl	socket
-	.globl	wait4
-	.globl	write
-	.globl	_exit
+	.globl	sys_accept
+	.globl	sys_bind
+	.globl	sys_close
+	.globl	sys_fork
+	.globl	sys_fstat
+	.globl	sys_listen
+	.globl	sys_mmap
+	.globl	sys_open
+	.globl	sys_read
+	.globl	sys_setitimer
+	.globl	sys_socket
+	.globl	sys_wait4
+	.globl	sys_write
+	.globl	sys_exit
 
 	.text
-accept:
+sys_accept:
 	mov	$43, %eax
 	syscall
 	ret
 
-bind:
+sys_bind:
 	mov	$49, %eax
 	syscall
 	ret
 
-close:
+sys_close:
 	mov	$3, %eax
 	syscall
 	ret
 
-fork:
+sys_fork:
 	mov	$57, %eax
 	syscall
 	ret
 
-fstat:
+sys_fstat:
 	mov	$5, %eax
 	syscall
 	ret
 
-listen:
+sys_listen:
 	mov	$50, %eax
 	syscall
 	ret
 
-mmap:
+sys_mmap:
 	mov	$9, %eax
 	mov	%rcx, %r10
 	syscall
 	ret
 
-open:
+sys_open:
 	mov	$2, %eax
 	syscall
 	ret
 
-read:
+sys_read:
 	mov	$0, %eax
 	syscall
 	ret
 
-setitimer:
+sys_setitimer:
 	mov	$38, %eax
 	syscall
 	ret
 
-socket:
+sys_socket:
 	mov	$41, %eax
 	syscall
 	ret
 
-wait4:
+sys_wait4:
 	mov	$61, %eax
 	mov	%rcx, %r10
 	syscall
 	ret
 
-write:
+sys_write:
 	mov	$1, %eax
 	syscall
 	ret
 
-_exit:
+sys_exit:
 	mov	$60, %eax
 	syscall

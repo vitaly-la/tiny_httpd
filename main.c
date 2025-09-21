@@ -1,27 +1,14 @@
-#include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <sys/mman.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
 #define MAIN_C
 
 #include "config.h"
 #include "parser.h"
-
-#ifdef LINUX
-#define MAP_ANON 0x20
-struct rusage;
-pid_t wait4(pid_t wpid, int *status, int options, struct rusage *rusage);
-#endif
+#include "sys.h"
 
 static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
                                  "Content-Type: text/html\r\n",
                                  "Connection: close\r\n" };
+
+static char buffer[1024];
 
 size_t strlen(const char *s)
 {
@@ -73,14 +60,14 @@ static char *create_response(const char *path)
     size_t len, response_len = 0, i;
     char *response, *ptr;
 
-    int fd = open(path, O_RDONLY);
+    int fd = sys_open(path, O_RDONLY);
     if (fd < 0 || fd == ENOENT) {
         char msg[] = "open failed\n";
-        write(2, msg, sizeof(msg) - 1);
-        _exit(1);
+        sys_write(2, msg, sizeof(msg) - 1);
+        sys_exit(1);
     }
 
-    fstat(fd, &sb);
+    sys_fstat(fd, &sb);
     len = sb.st_size;
 
     for (i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
@@ -92,8 +79,8 @@ static char *create_response(const char *path)
                     sizeof("\r\n") - 1 +
                     len + 1;
 
-    response = mmap(NULL, response_len, PROT_READ | PROT_WRITE,
-                    MAP_ANON | MAP_PRIVATE, -1, 0);
+    response = sys_mmap(NULL, response_len, PROT_READ | PROT_WRITE,
+                        MAP_ANON | MAP_PRIVATE, -1, 0);
 
     ptr = response;
     for (i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
@@ -104,10 +91,10 @@ static char *create_response(const char *path)
     ptr = mempcpy(ptr, itoa(len), strlen(itoa(len)));
     ptr = mempcpy(ptr, "\r\n", sizeof("\r\n") - 1);
     ptr = mempcpy(ptr, "\r\n", sizeof("\r\n") - 1);
-    ptr += read(fd, ptr, len);
+    ptr += sys_read(fd, ptr, len);
     *ptr = '\0';
 
-    close(fd);
+    sys_close(fd);
     return response;
 }
 
@@ -121,66 +108,63 @@ static void create_responses(const char **responses)
 
 static void serve(int client_fd, const char **responses)
 {
-    /* zero-initialization of itimerval causes SIGBUS
-       on linux clang -O2 */
+    /* zero-initialization of itimerval causes SIGSEGV
+       on linux for some reason */
     volatile struct itimerval timer;
     size_t cnt;
-    char buffer[1024];
     const char *response = NULL;
 
     timer.it_value.tv_sec     = 10;
     timer.it_value.tv_usec    =  0;
     timer.it_interval.tv_sec  =  0;
     timer.it_interval.tv_usec =  0;
-    setitimer(ITIMER_REAL, (const struct itimerval*)&timer, NULL);
+    sys_setitimer(ITIMER_REAL, (const struct itimerval*)&timer, NULL);
 
     for (cnt = 0;;) {
         char *ptr = buffer + cnt;
-        cnt += read(client_fd, ptr, sizeof(buffer) - cnt);
+        cnt += sys_read(client_fd, ptr, sizeof(buffer) - cnt);
         response = parse_request(buffer, buffer + cnt, responses);
         if (response) {
             break;
         }
     }
 
-    write(client_fd, response, strlen(response));
-    _exit(0);
+    sys_write(client_fd, response, strlen(response));
+    sys_exit(0);
 }
 
 void _start(void)
 {
     const char *responses[endpoints_count];
     int sock;
-    /* zero-initialization of sockaddr_in causes SEGFAULT
-       on linux for some reason */
-    volatile struct sockaddr_in sa;
+    struct sockaddr_in sa;
     socklen_t b;
 
     create_responses(responses);
-    sock = socket(PF_INET, SOCK_STREAM, 0);
+    sock = sys_socket(PF_INET, SOCK_STREAM, 0);
 
     sa.sin_family = AF_INET;
     sa.sin_port = my_htons(port);
     sa.sin_addr.s_addr = my_htonl(INADDR_ANY);
     b = sizeof(sa);
-    if (bind(sock, (const struct sockaddr*)&sa, b)) {
+    if (sys_bind(sock, (const struct sockaddr*)&sa, b)) {
         char msg[] = "bind failed\n";
-        write(2, msg, sizeof(msg) - 1);
-        _exit(1);
+        sys_write(2, msg, sizeof(msg) - 1);
+        sys_exit(1);
     }
 
-    listen(sock, 16);
+    sys_listen(sock, 16);
 
     for (;;) {
-        int client_fd = accept(sock, (struct sockaddr*)&sa, &b);
-        int pid = fork();
+        int client_fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
+        int pid = sys_fork();
         if (pid == 0) {
-            close(sock);
+            sys_close(sock);
             serve(client_fd, responses);
         }
-        close(client_fd);
+        sys_close(client_fd);
         do {
-            pid = wait4(-1, NULL, WNOHANG, NULL);
+            pid = sys_wait4(-1, NULL, WNOHANG, NULL);
         } while (pid > 0 && pid != ECHILD);
     }
 }
