@@ -104,29 +104,10 @@ static void create_responses(const char **responses)
     }
 }
 
-static void serve(int client_fd, const char **responses)
-{
-    static char buffer[1024];
-    size_t cnt;
-    const char *response = NULL;
-
-    for (cnt = 0;;) {
-        char *ptr = buffer + cnt;
-        cnt += sys_read(client_fd, ptr, sizeof(buffer) - cnt);
-        response = parse_request(buffer, buffer + cnt, responses);
-        if (response) {
-            break;
-        }
-    }
-
-    sys_write(client_fd, response, strlen(response));
-    sys_close(client_fd);
-}
-
 void _start(void)
 {
     static const char *responses[endpoints_count];
-    int sock, kq;
+    int sock, kq, cnt;
     struct sockaddr_in sa;
     socklen_t b;
     struct kevent event, tevent;
@@ -151,9 +132,26 @@ void _start(void)
     sys_listen(sock, 16);
 
     for (;;) {
-        int client_fd;
         sys_kevent(kq, NULL, 0, &tevent, 1, NULL);
-        client_fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
-        serve(client_fd, responses);
+        if ((int)event.ident == sock) {
+            int fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
+
+            EV_SET(&event, fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+            sys_kevent(kq, &event, 1, NULL, 0, NULL);
+
+            cnt = 0;
+        } else {
+            static char buffer[1024];
+            int fd = event.ident;
+            char *ptr = buffer + cnt;
+            const char *response = NULL;
+
+            cnt += sys_read(fd, ptr, sizeof(buffer) - cnt);
+            response = parse_request(buffer, buffer + cnt, responses);
+            if (response) {
+                sys_write(fd, response, strlen(response));
+                sys_close(fd);
+            }
+        }
     }
 }
