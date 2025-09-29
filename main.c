@@ -8,8 +8,6 @@ static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
                                  "Content-Type: text/html\r\n",
                                  "Connection: close\r\n" };
 
-static char buffer[1024];
-
 size_t strlen(const char *s)
 {
     size_t len = 0;
@@ -108,17 +106,9 @@ static void create_responses(const char **responses)
 
 static void serve(int client_fd, const char **responses)
 {
-    /* zero-initialization of itimerval causes SIGSEGV
-       on linux for some reason */
-    volatile struct itimerval timer;
+    static char buffer[1024];
     size_t cnt;
     const char *response = NULL;
-
-    timer.it_value.tv_sec     = 10;
-    timer.it_value.tv_usec    =  0;
-    timer.it_interval.tv_sec  =  0;
-    timer.it_interval.tv_usec =  0;
-    sys_setitimer(ITIMER_REAL, (const struct itimerval*)&timer, NULL);
 
     for (cnt = 0;;) {
         char *ptr = buffer + cnt;
@@ -130,15 +120,16 @@ static void serve(int client_fd, const char **responses)
     }
 
     sys_write(client_fd, response, strlen(response));
-    sys_exit(0);
+    sys_close(client_fd);
 }
 
 void _start(void)
 {
-    const char *responses[endpoints_count];
-    int sock;
+    static const char *responses[endpoints_count];
+    int sock, kq;
     struct sockaddr_in sa;
     socklen_t b;
+    struct kevent event, tevent;
 
     create_responses(responses);
     sock = sys_socket(PF_INET, SOCK_STREAM, 0);
@@ -153,18 +144,16 @@ void _start(void)
         sys_exit(1);
     }
 
+    kq = sys_kqueue();
+    EV_SET(&event, sock, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+    sys_kevent(kq, &event, 1, NULL, 0, NULL);
+
     sys_listen(sock, 16);
 
     for (;;) {
-        int client_fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
-        int pid = sys_fork();
-        if (pid == 0) {
-            sys_close(sock);
-            serve(client_fd, responses);
-        }
-        sys_close(client_fd);
-        do {
-            pid = sys_wait4(-1, NULL, WNOHANG, NULL);
-        } while (pid > 0 && pid != ECHILD);
+        int client_fd;
+        sys_kevent(kq, NULL, 0, &tevent, 1, NULL);
+        client_fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
+        serve(client_fd, responses);
     }
 }
