@@ -4,6 +4,12 @@
 #include "parser.h"
 #include "sys.h"
 
+struct connection
+{
+    int fd;
+    int offset;
+};
+
 static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
                                  "Content-Type: text/html\r\n",
                                  "Connection: close\r\n" };
@@ -107,7 +113,9 @@ static void create_responses(const char **responses)
 void _start(void)
 {
     static const char *responses[endpoints_count];
-    int sock, kq, cnt;
+    static struct connection connections[max_connections];
+    static char buffers[max_connections * buffer_size];
+    int sock, kq;
     struct sockaddr_in sa;
     socklen_t b;
     struct kevent event, tevent;
@@ -133,25 +141,60 @@ void _start(void)
 
     for (;;) {
         sys_kevent(kq, NULL, 0, &tevent, 1, NULL);
-        if ((int)event.ident == sock) {
+        if ((int)tevent.ident == sock) {
             int fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
+            int i;
 
-            EV_SET(&event, fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
-            sys_kevent(kq, &event, 1, NULL, 0, NULL);
+            for (i = 0; i < max_connections; ++i) {
+                if (connections[i].fd == 0) {
+                    connections[i].fd = fd;
+                    connections[i].offset = 0;
+                    EV_SET(&event, fd, EVFILT_READ, EV_ADD | EV_CLEAR,
+                           0, 0, NULL);
+                    sys_kevent(kq, &event, 1, NULL, 0, NULL);
+                    EV_SET(&event, fd, EVFILT_TIMER, EV_ADD | EV_ONESHOT,
+                           NOTE_SECONDS, timeout, NULL);
+                    sys_kevent(kq, &event, 1, NULL, 0, NULL);
+                    break;
+                }
+            }
 
-            cnt = 0;
-        } else {
-            static char buffer[1024];
-            int fd = event.ident;
-            char *ptr = buffer + cnt;
+            if (i == max_connections) {
+                sys_close(fd);
+            }
+        } else if (tevent.filter == EVFILT_READ) {
+            int fd = tevent.ident;
+            int i, offset;
+            char *buffer, *ptr;
             const char *response = NULL;
 
-            cnt += sys_read(fd, ptr, sizeof(buffer) - cnt);
-            response = parse_request(buffer, buffer + cnt, responses);
+            for (i = 0; connections[i].fd != fd; ++i) {}
+
+            buffer = buffers + i * buffer_size;
+            offset = connections[i].offset;
+            ptr = buffer + offset;
+
+            offset += sys_read(fd, ptr, buffer_size - offset);
+            connections[i].offset = offset;
+
+            response = parse_request(buffer, buffer + offset, responses);
+
             if (response) {
                 sys_write(fd, response, strlen(response));
                 sys_close(fd);
+                connections[i].fd = 0;
+                EV_SET(&event, fd, EVFILT_TIMER, EV_DELETE,
+                       NOTE_SECONDS, timeout, NULL);
+                sys_kevent(kq, &event, 1, NULL, 0, NULL);
             }
+        } else if (tevent.filter == EVFILT_TIMER) {
+            int fd = tevent.ident;
+            int i;
+
+            for (i = 0; connections[i].fd != fd; ++i) {}
+
+            sys_close(fd);
+            connections[i].fd = 0;
         }
     }
 }
