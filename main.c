@@ -115,10 +115,17 @@ void _start(void)
     static const char *responses[endpoints_count];
     static struct connection connections[max_connections];
     static char buffers[max_connections * buffer_size];
-    int sock, kq;
+    int sock;
     struct sockaddr_in sa;
     socklen_t b;
+
+#ifdef LINUX
+    int epoll_fd;
+    struct epoll_event event, tevent;
+#else /* FreeBSD */
+    int kq;
     struct kevent event, tevent;
+#endif /* FreeBSD */
 
     create_responses(responses);
     sock = sys_socket(PF_INET, SOCK_STREAM, 0);
@@ -133,12 +140,65 @@ void _start(void)
         sys_exit(1);
     }
 
+#ifdef LINUX
+    epoll_fd = sys_epoll_create1(0);
+    event.events = EPOLLIN;
+    event.data.fd = sock;
+    sys_epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &event);
+#else /* FreeBSD */
     kq = sys_kqueue();
     EV_SET(&event, sock, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
     sys_kevent(kq, &event, 1, NULL, 0, NULL);
+#endif /* FreeBSD */
 
     sys_listen(sock, 16);
 
+#ifdef LINUX
+    for (;;) {
+        sys_epoll_wait(epoll_fd, &tevent, 1, -1);
+        if (tevent.data.fd == sock) {
+            int fd = sys_accept(sock, (struct sockaddr*)&sa, &b);
+            int i;
+
+            for (i = 0; i < max_connections; ++i) {
+                if (connections[i].fd == 0) {
+                    connections[i].fd = fd;
+                    connections[i].offset = 0;
+                    event.events = EPOLLIN;
+                    event.data.fd = fd;
+                    sys_epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event);
+                    break;
+                }
+            }
+
+            if (i == max_connections) {
+                sys_close(fd);
+            }
+        } else {
+            int fd = tevent.data.fd;
+            int i, offset;
+            char *buffer, *ptr;
+            const char *response = NULL;
+
+            for (i = 0; connections[i].fd != fd; ++i) {}
+
+            buffer = buffers + i * buffer_size;
+            offset = connections[i].offset;
+            ptr = buffer + offset;
+
+            offset += sys_read(fd, ptr, buffer_size - offset);
+            connections[i].offset = offset;
+
+            response = parse_request(buffer, buffer + offset, responses);
+
+            if (response) {
+                sys_write(fd, response, strlen(response));
+                sys_close(fd);
+                connections[i].fd = 0;
+            }
+        }
+    }
+#else /* FreeBSD */
     for (;;) {
         sys_kevent(kq, NULL, 0, &tevent, 1, NULL);
         if ((int)tevent.ident == sock) {
@@ -197,4 +257,5 @@ void _start(void)
             connections[i].fd = 0;
         }
     }
+#endif /* FreeBSD */
 }

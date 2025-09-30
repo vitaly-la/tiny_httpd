@@ -11,11 +11,20 @@
 
 #  ifdef LINUX
 
+#    include <sys/epoll.h>
+
 #    ifndef MAP_ANON
 #      define MAP_ANON 0x20
 #    endif
 
 struct rusage;
+
+int sys_epoll_create1(int flags);
+
+int sys_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+
+int sys_epoll_wait(int epfd, struct epoll_event *events,
+                   int maxevents, int timeout);
 
 #  else /* FreeBSD */
 
@@ -27,7 +36,7 @@ int sys_kevent(int kq, const struct kevent *changelist, int nchanges,
 
 int sys_kqueue(void);
 
-#  endif /* LINUX */
+#  endif /* FreeBSD */
 
 int sys_accept(int s, struct sockaddr *addr, socklen_t *addrlen);
 

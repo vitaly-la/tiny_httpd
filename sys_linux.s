@@ -1,6 +1,9 @@
 	.globl	sys_accept
 	.globl	sys_bind
 	.globl	sys_close
+	.globl	sys_epoll_create1
+	.globl	sys_epoll_ctl
+	.globl	sys_epoll_wait
 	.globl	sys_fstat
 	.globl	sys_listen
 	.globl	sys_mmap
@@ -23,6 +26,23 @@ sys_bind:
 
 sys_close:
 	mov	$3, %eax
+	syscall
+	ret
+
+sys_epoll_create1:
+	mov	$291, %eax
+	syscall
+	ret
+
+sys_epoll_ctl:
+	mov	$233, %eax
+	mov	%rcx, %r10
+	syscall
+	ret
+
+sys_epoll_wait:
+	mov	$232, %eax
+	mov	%rcx, %r10
 	syscall
 	ret
 
