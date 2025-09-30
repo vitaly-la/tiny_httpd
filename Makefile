@@ -6,7 +6,7 @@ ifeq ($(SYS), sys_linux)
 	CFLAGS += -DLINUX
 endif
 
-tiny_httpd: main.o parser.o $(SYS).s
+tiny_httpd: main.o event.o parser.o $(SYS).s
 	$(CC) $(LDFLAGS) $^ -o $@
 	objcopy --remove-section .comment      		$@
 	objcopy --remove-section .eh_frame     		$@
@@ -14,6 +14,9 @@ tiny_httpd: main.o parser.o $(SYS).s
 	objcopy --remove-section .note.gnu.build-id	$@
 
 main.o: main.c config.h sys.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+event.o: event.c event.h sys.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 parser.o: parser.c parser.h config.h

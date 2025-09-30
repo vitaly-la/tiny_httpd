@@ -4,4 +4,4 @@
 const char *parse_request(const char *buffer, const char *end,
                           const char **responses);
 
-#endif
+#endif /* PARSER_H */

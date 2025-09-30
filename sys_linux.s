@@ -10,6 +10,8 @@
 	.globl	sys_open
 	.globl	sys_read
 	.globl	sys_socket
+	.globl	sys_timerfd_create
+	.globl	sys_timerfd_settime
 	.globl	sys_write
 	.globl	sys_exit
 
@@ -74,6 +76,17 @@ sys_read:
 
 sys_socket:
 	mov	$41, %eax
+	syscall
+	ret
+
+sys_timerfd_create:
+	mov	$283, %eax
+	syscall
+	ret
+
+sys_timerfd_settime:
+	mov	$286, %eax
+	mov	%rcx, %r10
 	syscall
 	ret
 
