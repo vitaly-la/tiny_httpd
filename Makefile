@@ -13,7 +13,7 @@ tiny_httpd: main.o event.o parser.o $(SYS).s
 	objcopy --remove-section .eh_frame_hdr 		$@
 	objcopy --remove-section .note.gnu.build-id	$@
 
-main.o: main.c config.h sys.h
+main.o: main.c config.h event.h parser.h sys.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 event.o: event.c event.h sys.h

@@ -18,6 +18,10 @@
 #      define MAP_ANON 0x20
 #    endif
 
+#    ifndef CLOCK_REALTIME
+#      define CLOCK_REALTIME 0
+#    endif
+
 typedef struct epoll_event event_t;
 
 struct rusage;

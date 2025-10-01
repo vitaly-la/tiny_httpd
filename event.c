@@ -2,6 +2,8 @@
 
 #ifdef LINUX
 
+#  define EPOLLTIMER (1 << 31)
+
 int init_queue(void)
 {
     return sys_epoll_create1(0);
@@ -23,25 +25,38 @@ void wait_queue(int kq, event_t *pevent)
 
 int get_descriptor(event_t *pevent)
 {
-    return pevent->data.fd;
+    if (pevent->data.fd & EPOLLTIMER) {
+        return pevent->data.fd ^ EPOLLTIMER;
+    } else {
+        return pevent->data.fd;
+    }
 }
 
-void queue_timer(int kq, int fd, int64_t timeout);
-    (void)kq;
-    (void)fd;
-    (void)timeout;
-}
-
-void delete_timer(int kq, int fd, int64_t timeout)
-    (void)kq;
-    (void)fd;
-    (void)timeout;
-}
-
-int is_read_event(event_t *pevent)
+int queue_timer(int kq, int fd, int64_t timeout)
 {
-    (void)pevent;
-    return 1;
+    int timer_fd = sys_timerfd_create(CLOCK_REALTIME, 0);
+    struct itimerspec time;
+    event_t event;
+
+    time.it_value.tv_sec = timeout;
+    time.it_value.tv_nsec = 0;
+    time.it_interval.tv_sec = 0;
+    time.it_interval.tv_nsec = 0;
+    sys_timerfd_settime(timer_fd, 0, &time, NULL);
+
+    event.events = EPOLLIN | EPOLLONESHOT;
+    event.data.fd = fd | EPOLLTIMER;
+    sys_epoll_ctl(kq, EPOLL_CTL_ADD, timer_fd, &event);
+
+    return timer_fd;
+}
+
+enum event_type get_event_type(event_t *pevent)
+{
+    if (pevent->data.fd & EPOLLTIMER) {
+        return timer_event;
+    }
+    return read_event;
 }
 
 #else /* FreeBSD */
@@ -87,9 +102,12 @@ void delete_timer(int kq, int fd, int64_t timeout)
     sys_kevent(kq, &event, 1, NULL, 0, NULL);
 }
 
-int is_read_event(event_t *pevent)
+enum event_type get_event_type(event_t *pevent)
 {
-    return pevent->filter == EVFILT_READ;
+    if (pevent->filter == EVFILT_READ) {
+        return read_event;
+    }
+    return timer_event;
 }
 
 #endif

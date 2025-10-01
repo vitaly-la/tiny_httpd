@@ -9,6 +9,9 @@ struct connection
 {
     int fd;
     int offset;
+#ifdef LINUX
+    int timer_fd;
+#endif
 };
 
 static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
@@ -151,7 +154,11 @@ void _start(void)
                     connections[i].fd = fd;
                     connections[i].offset = 0;
                     queue_descriptor(kq, fd);
+#ifdef LINUX
+                    connections[i].timer_fd = queue_timer(kq, fd, timeout);
+#else /* FreeBSD */
                     queue_timer(kq, fd, timeout);
+#endif
                     break;
                 }
             }
@@ -160,7 +167,7 @@ void _start(void)
                 sys_close(fd);
             }
 
-        } else if (is_read_event(&event)) {
+        } else if (get_event_type(&event) == read_event) {
             int fd = get_descriptor(&event);
             int i, offset;
             char *buffer, *ptr;
@@ -181,7 +188,11 @@ void _start(void)
                 sys_write(fd, response, strlen(response));
                 sys_close(fd);
                 connections[i].fd = 0;
+#ifdef LINUX
+                sys_close(connections[i].timer_fd);
+#else /* FreeBSD */
                 delete_timer(kq, fd, timeout);
+#endif
             }
 
         } else {
@@ -192,6 +203,9 @@ void _start(void)
 
             sys_close(fd);
             connections[i].fd = 0;
+#ifdef LINUX
+            sys_close(connections[i].timer_fd);
+#endif
         }
     }
 }
