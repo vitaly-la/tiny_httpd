@@ -1,5 +1,5 @@
 #ifndef CONFIG_H
-#  define CONFIG_H
+#define CONFIG_H
 
 enum
 {
@@ -10,7 +10,7 @@ enum
     timeout         = 10
 };
 
-#  ifdef MAIN_C
+#ifdef MAIN_C
 
 const char *endpoints[endpoints_count] = {
     "/",
@@ -20,12 +20,12 @@ const char *pages[endpoints_count] = {
     "index.html",
 };
 
-#  else
+#else
 
 extern const char *endpoints[endpoints_count];
 
 extern const char *pages[endpoints_count];
 
-#  endif
+#endif
 
 #endif /* CONFIG_H */

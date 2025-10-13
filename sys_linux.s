@@ -5,6 +5,7 @@
 	.globl	sys_epoll_ctl
 	.globl	sys_epoll_wait
 	.globl	sys_fstat
+	.globl	sys_gettimeofday
 	.globl	sys_listen
 	.globl	sys_mmap
 	.globl	sys_open
@@ -50,6 +51,11 @@ sys_epoll_wait:
 
 sys_fstat:
 	mov	$5, %eax
+	syscall
+	ret
+
+sys_gettimeofday:
+	mov	$96, %eax
 	syscall
 	ret
 

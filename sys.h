@@ -1,30 +1,32 @@
 #ifndef SYS_H
-#  define SYS_H
+#define SYS_H
 
-#  include <errno.h>
-#  include <fcntl.h>
-#  include <netinet/in.h>
-#  include <stddef.h>
-#  include <sys/mman.h>
-#  include <sys/socket.h>
-#  include <sys/stat.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <stddef.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 
-#  ifdef LINUX
+#ifdef LINUX
 
-#    include <sys/epoll.h>
-#    include <sys/timerfd.h>
+#include <sys/epoll.h>
+#include <sys/timerfd.h>
 
-#    ifndef MAP_ANON
-#      define MAP_ANON 0x20
-#    endif
+#ifndef MAP_ANON
+#define MAP_ANON 0x20
+#endif
 
-#    ifndef CLOCK_REALTIME
-#      define CLOCK_REALTIME 0
-#    endif
+#ifndef CLOCK_REALTIME
+#define CLOCK_REALTIME 0
+#endif
 
 typedef struct epoll_event event_t;
 
 struct rusage;
+struct timezone;
 
 int sys_epoll_create1(int flags);
 
@@ -39,9 +41,9 @@ int sys_timerfd_settime(int fd, int flags,
                         const struct itimerspec *new_value,
                         struct itimerspec *old_value);
 
-#  else /* FreeBSD */
+#else /* FreeBSD */
 
-#    include <sys/event.h>
+#include <sys/event.h>
 
 typedef struct kevent event_t;
 
@@ -51,7 +53,7 @@ int sys_kevent(int kq, const struct kevent *changelist, int nchanges,
 
 int sys_kqueue(void);
 
-#  endif
+#endif
 
 int sys_accept(int s, struct sockaddr *addr, socklen_t *addrlen);
 
@@ -60,6 +62,8 @@ int sys_bind(int s, const struct sockaddr *addr, socklen_t addrlen);
 int sys_close(int fd);
 
 int sys_fstat(int fd, struct stat *sb);
+
+int sys_gettimeofday(struct timeval *tp, struct timezone *tzp);
 
 int sys_listen(int s, int backlog);
 

@@ -2,6 +2,7 @@
 	.globl	sys_bind
 	.globl	sys_close
 	.globl	sys_fstat
+	.globl	sys_gettimeofday
 	.globl	sys_kevent
 	.globl	sys_kqueue
 	.globl	sys_listen
@@ -30,6 +31,11 @@ sys_close:
 
 sys_fstat:
 	mov	$551, %eax
+	syscall
+	ret
+
+sys_gettimeofday:
+	mov	$116, %eax
 	syscall
 	ret
 

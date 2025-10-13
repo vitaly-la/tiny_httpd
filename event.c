@@ -2,7 +2,7 @@
 
 #ifdef LINUX
 
-#  define EPOLLTIMER (1 << 31)
+#define EPOLLTIMER (1 << 31)
 
 int init_queue(void)
 {

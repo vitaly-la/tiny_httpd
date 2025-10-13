@@ -1,7 +1,7 @@
 #ifndef EVENT_H
-#  define EVENT_H
+#define EVENT_H
 
-#  include "sys.h"
+#include "sys.h"
 
 enum event_type
 {
@@ -17,11 +17,11 @@ void wait_queue(int kq, event_t *pevent);
 
 int get_descriptor(event_t *pevent);
 
-#  ifdef LINUX
+#ifdef LINUX
 int  queue_timer(int kq, int fd, int64_t timeout);
-#  else /* FreeBSD */
+#else /* FreeBSD */
 void queue_timer(int kq, int fd, int64_t timeout);
-#  endif
+#endif
 
 void delete_timer(int kq, int fd, int64_t timeout);
 
