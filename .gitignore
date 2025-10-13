@@ -1,2 +1,3 @@
 *.o
 tiny_httpd
+deps.mk

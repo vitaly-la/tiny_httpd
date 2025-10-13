@@ -1,4 +1,6 @@
 SYS = $(shell uname | grep -iq linux && echo sys_linux || echo sys_bsd)
+SRC = main.c date.c event.c parser.c
+OBJ = $(SRC:.c=.o)
 CFLAGS = -Wall -Wextra -ansi -pedantic -O2 -ffreestanding
 LDFLAGS = -static -nostdlib -s
 
@@ -6,24 +8,22 @@ ifeq ($(SYS), sys_linux)
 	CFLAGS += -DLINUX
 endif
 
-tiny_httpd: main.o date.o event.o parser.o $(SYS).s
+%.o: %.c %.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+tiny_httpd: $(OBJ) $(SYS).s
 	$(CC) $(LDFLAGS) $^ -o $@
 	objcopy --remove-section .comment      		$@
 	objcopy --remove-section .eh_frame     		$@
 	objcopy --remove-section .eh_frame_hdr 		$@
 	objcopy --remove-section .note.gnu.build-id	$@
 
-main.o: main.c config.h date.h event.h parser.h sys.h
-	$(CC) $(CFLAGS) -c $< -o $@
+ifneq (clean, $(MAKECMDGOALS))
+-include deps.mk
+endif
 
-date.o: date.c date.h sys.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-event.o: event.c event.h sys.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-parser.o: parser.c parser.h config.h
-	$(CC) $(CFLAGS) -c $< -o $@
+deps.mk: $(SRC)
+	$(CC) -MM $^ >$@
 
 clean:
-	rm -f *.o tiny_httpd
+	rm -f *.o tiny_httpd deps.mk
