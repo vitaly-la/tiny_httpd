@@ -19,19 +19,19 @@ static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
                                  "Content-Type: text/html\r\n",
                                  "Connection: close\r\n" };
 
-char *itoa(unsigned val)
+char *itoa(unsigned val, int pos)
 {
     static char buf[32];
     int i;
 
     buf[31] = '\0';
-    i = 30;
-    do {
+    for (i = 30; i >= 0; --i) {
         buf[i] = "0123456789"[val % 10];
-        --i;
         val /= 10;
-    } while (val && i);
-    return &buf[i + 1];
+        --pos;
+        if (!val && pos <= 0) break;
+    }
+    return buf + i;
 }
 
 char *stpcpy(char *dst, const char *src)
@@ -87,7 +87,7 @@ static void create_response(const char *path, char **presponse)
         response_len += strlen(headers[i]);
     }
     response_len += sizeof("Content-Length: ") - 1 +
-                    strlen(itoa(len)) +
+                    strlen(itoa(len, 0)) +
                     sizeof("\r\n") - 1 +
                     sizeof("Date: ") - 1 +
                     strlen(date) +
@@ -105,7 +105,7 @@ static void create_response(const char *path, char **presponse)
         ptr = stpcpy(ptr, headers[i]);
     }
     ptr = stpcpy(ptr, "Content-Length: ");
-    ptr = stpcpy(ptr, itoa(len));
+    ptr = stpcpy(ptr, itoa(len, 0));
     ptr = stpcpy(ptr, "\r\n");
     ptr = stpcpy(ptr, "Date: ");
     ptr = stpcpy(ptr, date);

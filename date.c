@@ -2,7 +2,7 @@
 
 #include "sys.h"
 
-char *itoa(unsigned val);
+char *itoa(unsigned val, int pos);
 char *stpcpy(char *dst, const char *src);
 
 struct year
@@ -74,17 +74,17 @@ static const char *get_rfc(time_t tv_sec)
     char *ptr = buffer;
     ptr = stpcpy(ptr, day[tv_sec / 3600 / 24 % 7]);
     ptr = stpcpy(ptr, ", ");
-    ptr = stpcpy(ptr, itoa(date.day));
+    ptr = stpcpy(ptr, itoa(date.day, 2));
     ptr = stpcpy(ptr, " ");
     ptr = stpcpy(ptr, date.month);
     ptr = stpcpy(ptr, " ");
-    ptr = stpcpy(ptr, itoa(year.year));
+    ptr = stpcpy(ptr, itoa(year.year, 2));
     ptr = stpcpy(ptr, " ");
-    ptr = stpcpy(ptr, itoa(tv_sec / 3600 % 24));
+    ptr = stpcpy(ptr, itoa(tv_sec / 3600 % 24, 2));
     ptr = stpcpy(ptr, ":");
-    ptr = stpcpy(ptr, itoa(tv_sec / 60 % 60));
+    ptr = stpcpy(ptr, itoa(tv_sec / 60 % 60, 2));
     ptr = stpcpy(ptr, ":");
-    ptr = stpcpy(ptr, itoa(tv_sec % 60));
+    ptr = stpcpy(ptr, itoa(tv_sec % 60, 2));
     ptr = stpcpy(ptr, " GMT");
     return buffer;
 }
