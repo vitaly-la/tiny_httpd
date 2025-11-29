@@ -16,7 +16,6 @@ struct connection
 };
 
 static const char *headers[] = { "HTTP/1.1 200 OK\r\n",
-                                 "Content-Type: text/html\r\n",
                                  "Connection: close\r\n" };
 
 char *itoa(unsigned val, int pos)
@@ -64,39 +63,67 @@ static uint32_t my_htonl(uint32_t hostlong)
            ((hostlong & (255 <<  0)) << 24);
 }
 
+static int endswith(const char *str, const char *suffix)
+{
+    size_t str_len, suffix_len, i;
+    str_len = strlen(str);
+    suffix_len = strlen(suffix);
+    for (i = 0; i < suffix_len; ++i) {
+        if (str[str_len - 1 - i] != suffix[suffix_len - 1 - i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static const char *get_content_type(const char *path)
+{
+    if (endswith(path, ".html")) {
+        return "Content-Type: text/html";
+    } else if (endswith(path, ".css")) {
+        return "Content-Type: text/css";
+    } else {
+        return "Content-Type: text/plain";
+    }
+}
+
 static void create_response(const char *path, char **presponse)
 {
     struct stat sb;
-    size_t len, response_len = 0, i;
+    size_t content_len, response_len, i;
     char *ptr;
-    const char *date;
+    const char *content_type, *date;
 
     int fd = sys_open(path, O_RDONLY);
     if (fd < 0 || fd == ENOENT) {
         char msg[] = "open failed\n";
-        sys_write(2, msg, sizeof(msg) - 1);
+        sys_write(2, msg, strlen(msg));
         sys_exit(1);
     }
 
     sys_fstat(fd, &sb);
-    len = sb.st_size;
+    content_len = sb.st_size;
 
+    content_type = get_content_type(path);
     date = get_rfc_now();
 
+    response_len = 0;
     for (i = 0; i < sizeof(headers) / sizeof(*headers); ++i) {
         response_len += strlen(headers[i]);
     }
-    response_len += sizeof("Content-Length: ") - 1 +
-                    strlen(itoa(len, 0)) +
-                    sizeof("\r\n") - 1 +
-                    sizeof("Date: ") - 1 +
-                    strlen(date) +
-                    sizeof("\r\n") - 1 +
-                    sizeof("\r\n") - 1 +
-                    len + 1;
+    response_len += strlen("Content-Length: ") +
+                    strlen(itoa(content_len, 0)) +
+                    strlen("\r\n") +
+                    strlen(content_type) +
+                    strlen("\r\n") +
+                    strlen("Date: ") + strlen(date) +
+                    strlen("\r\n") +
+                    strlen("\r\n") +
+                    content_len + 1;
 
     if (!*presponse) {
-        *presponse = sys_mmap(NULL, response_len, PROT_READ | PROT_WRITE,
+        *presponse = sys_mmap(NULL, response_len,
+                              PROT_READ | PROT_WRITE,
                               MAP_ANON | MAP_PRIVATE, -1, 0);
     }
 
@@ -105,13 +132,15 @@ static void create_response(const char *path, char **presponse)
         ptr = stpcpy(ptr, headers[i]);
     }
     ptr = stpcpy(ptr, "Content-Length: ");
-    ptr = stpcpy(ptr, itoa(len, 0));
+    ptr = stpcpy(ptr, itoa(content_len, 0));
+    ptr = stpcpy(ptr, "\r\n");
+    ptr = stpcpy(ptr, content_type);
     ptr = stpcpy(ptr, "\r\n");
     ptr = stpcpy(ptr, "Date: ");
     ptr = stpcpy(ptr, date);
     ptr = stpcpy(ptr, "\r\n");
     ptr = stpcpy(ptr, "\r\n");
-    ptr += sys_read(fd, ptr, len);
+    ptr += sys_read(fd, ptr, content_len);
     *ptr = '\0';
 
     sys_close(fd);
@@ -142,7 +171,7 @@ void _start(void)
     b = sizeof(sa);
     if (sys_bind(sock, (const struct sockaddr*)&sa, b)) {
         char msg[] = "bind failed\n";
-        sys_write(2, msg, sizeof(msg) - 1);
+        sys_write(2, msg, strlen(msg));
         sys_exit(1);
     }
 
